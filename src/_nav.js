@@ -25,11 +25,54 @@ export default [
   {
     component: 'CNavItem',
     name: 'Dashboard',
-    to: '/dashboard',
-    icon: 'cil-speedometer',
-    badge: {
-      color: 'primary',
-      text: 'NEW',
-    },
+    to: '/admin',
+    icon: 'cilSpeedometer',
   },
+
+  // {
+  //   component: 'CNavItem',
+  //   name: 'Participants',
+  //   to: '/admin/participants',
+  //   icon: 'cilPeople',
+  // },
+
+  // {
+  //   component: 'CNavItem',
+  //   name: 'Question Bank',
+  //   to: '/admin/questions',
+  //   icon: 'cilList',
+  // },
+
+  // {
+  //   component: 'CNavItem',
+  //   name: 'Draw Sections',
+  //   to: '/admin/prizes',
+  //   icon: 'cilLayers',
+  // },
+
+  // {
+  //   component: 'CNavItem',
+  //   name: 'Winners',
+  //   to: '/admin/winners',
+  //   icon: 'cilStar',
+  // },
+
+  // {
+  //   component: 'CNavTitle',
+  //   name: 'Public Pages',
+  // },
+
+  // {
+  //   component: 'CNavItem',
+  //   name: 'Registration',
+  //   to: '/register',
+  //   icon: 'cilUserFollow',
+  // },
+
+  // {
+  //   component: 'CNavItem',
+  //   name: 'Kiosk',
+  //   to: '/kiosk',
+  //   icon: 'cilLaptop',
+  // },
 ]
