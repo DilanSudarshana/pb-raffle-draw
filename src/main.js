@@ -30,6 +30,7 @@ import { iconsSet as icons } from '@/assets/icons'
 import DocsComponents from '@/components/DocsComponents'
 import DocsExample from '@/components/DocsExample'
 import DocsIcons from '@/components/DocsIcons'
+import { supabase } from '@/lib/supabase'
 
 // Create Vue application instance
 const app = createApp(App)
@@ -45,7 +46,6 @@ app.provide('icons', icons)
 // Register global components
 app.component('CIcon', CIcon)
 app.component('DocsComponents', DocsComponents)
-app.component('DocsExample', DocsExample)
 app.component('DocsIcons', DocsIcons)
 
 // Mount application to DOM

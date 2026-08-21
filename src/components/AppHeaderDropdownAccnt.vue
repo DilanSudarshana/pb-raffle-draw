@@ -1,8 +1,7 @@
 <template>
   <CNavItem>
-    <CNavLink href="#" class="logout-link" @click.prevent="handleLogout">
-      <CIcon icon="cil-lock-locked" class="logout-icon" />
-      <span class="logout-text">Logout</span>
+    <CNavLink component="button" type="button" @click="handleLogout" class="w-100 text-start">
+      <CIcon icon="cil-lock-locked" /> Logout
     </CNavLink>
   </CNavItem>
 </template>
@@ -16,15 +15,10 @@ const router = useRouter()
 const handleLogout = async () => {
   try {
     const { error } = await supabase.auth.signOut()
-
-    if (error) {
-      throw error
-    }
+    if (error) throw error
+    router.push('/')
   } catch (error) {
     console.error('Logout error:', error)
-  } finally {
-    localStorage.clear()
-    router.push('/admin/login')
   }
 }
 </script>

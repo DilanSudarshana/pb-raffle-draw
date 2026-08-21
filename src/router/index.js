@@ -1,41 +1,31 @@
 /**
  * router/index.js - Vue Router Configuration
  *
- * This file configures the application routing using Vue Router 5.
- * It defines all routes and navigation structure for the SPA.
+ * Public:
+ *   /admin/login
+ *   /
  *
- * Routing Features:
- * - Hash-based routing (createWebHashHistory) for static hosting compatibility
- * - Lazy loading for all route components (code splitting)
- * - Nested routes for layout-based navigation
- * - Automatic scroll to top on navigation
- *
- * Route Structure:
- * - Protected routes: Wrapped in DefaultLayout with sidebar and header
- * - Public routes: Login, Register, 404, 500 pages without layout
- *
- * Adding New Routes:
- * 1. Import component (use dynamic import for code splitting)
- * 2. Add route object to appropriate section
- * 3. Update _nav.js for sidebar navigation (if needed)
- *
- * @see https://router.vuejs.org/
+ * Protected:
+ *   /admin/*
  */
 
-import { h, resolveComponent } from 'vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
 
 import DefaultLayout from '@/layouts/DefaultLayout'
+import { supabase } from '@/lib/supabase'
 
-/**
- * Application routes configuration
- * @type {Array<Object>}
- */
 const routes = [
+  // =========================================================
+  // PUBLIC ROUTES
+  // =========================================================
+
   {
     path: '/admin/login',
     name: 'Login',
     component: () => import('@/views/authentication/login.vue'),
+    meta: {
+      requiresGuest: true,
+    },
   },
 
   {
@@ -44,32 +34,108 @@ const routes = [
     component: () => import('@/views/user_register/user_register.vue'),
   },
 
+  // =========================================================
+  // PROTECTED ADMIN ROUTES
+  // =========================================================
+
   {
-    path: '/',
-    name: 'Home',
+    path: '/admin',
     component: DefaultLayout,
-    redirect: '/dashboard',
+    meta: {
+      requiresAuth: true,
+    },
+
+    redirect: '/admin/dashboard',
+
     children: [
       {
-        path: '/dashboard',
+        path: 'dashboard',
         name: 'Dashboard',
-        // route level code-splitting
-        // this generates a separate chunk (about.[hash].js) for this route
-        // which is lazy-loaded when the route is visited.
-        component: () =>
-          import(/* webpackChunkName: "dashboard" */ '@/views/dashboard/Dashboard.vue'),
+        component: () => import('@/views/dashboard/Dashboard.vue'),
       },
     ],
+  },
+
+  // =========================================================
+  // 404
+  // =========================================================
+
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/',
   },
 ]
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
+
   routes,
+
   scrollBehavior() {
-    // always scroll to top
-    return { top: 0 }
+    return {
+      top: 0,
+    }
   },
+})
+
+// =========================================================
+// AUTHENTICATION GUARD
+//
+// requiresAuth uses getUser(), which round-trips to the Supabase
+// Auth server and validates the token — this cannot be fooled by
+// a stale local session. Not logged in → redirect to '/' per
+// requirement.
+// =========================================================
+
+router.beforeEach(async (to) => {
+  console.log('[guard] navigating to:', to.fullPath, 'meta:', to.meta)
+
+  if (to.meta.requiresAuth) {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser()
+
+    console.log('[guard] requiresAuth — user:', user, 'error:', error)
+
+    if (error || !user) {
+      console.log('[guard] BLOCKED, redirecting to /')
+      return '/'
+    }
+
+    console.log('[guard] ALLOWED')
+    return true
+  }
+
+  if (to.meta.requiresGuest) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (session) {
+      return '/admin/dashboard'
+    }
+  }
+
+  return true
+})
+
+// =========================================================
+// GLOBAL AUTH STATE LISTENER
+//
+// beforeEach only re-checks auth when a navigation happens.
+// If the user logs out while sitting on a protected page (no
+// navigation triggered), the guard above never re-runs. This
+// listener reacts directly to Supabase's own auth events.
+// =========================================================
+
+supabase.auth.onAuthStateChange((event) => {
+  console.log('[auth] event:', event)
+  if (event === 'SIGNED_OUT') {
+    if (router.currentRoute.value.path !== '/') {
+      router.replace('/')
+    }
+  }
 })
 
 export default router
