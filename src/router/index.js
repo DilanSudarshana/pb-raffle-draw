@@ -20,18 +20,24 @@ const routes = [
   // =========================================================
 
   {
+    path: '/',
+    name: 'Register',
+    component: () => import('@/views/user_register/user_register.vue'),
+  },
+
+  {
+    path: '/kiosk',
+    name: 'kiosk',
+    component: () => import('@/views/kiosk/kiosk.vue'),
+  },
+
+  {
     path: '/admin/login',
     name: 'Login',
     component: () => import('@/views/authentication/login.vue'),
     meta: {
       requiresGuest: true,
     },
-  },
-
-  {
-    path: '/',
-    name: 'Register',
-    component: () => import('@/views/user_register/user_register.vue'),
   },
 
   // =========================================================
