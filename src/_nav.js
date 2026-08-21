@@ -25,7 +25,7 @@ export default [
   {
     component: 'CNavItem',
     name: 'Dashboard',
-    to: '/admin',
+    to: '/dashboard',
     icon: 'cilSpeedometer',
   },
 

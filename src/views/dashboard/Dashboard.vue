@@ -127,7 +127,7 @@ const tableExample = [
 <template>
   <div>
     <WidgetsStatsA class="mb-4" />
-    <CRow>
+    <!-- <CRow>
       <CCol :md="12">
         <CCard class="mb-4">
           <CCardBody>
@@ -331,6 +331,6 @@ const tableExample = [
           </CCardBody>
         </CCard>
       </CCol>
-    </CRow>
+    </CRow> -->
   </div>
 </template>
