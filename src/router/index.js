@@ -88,22 +88,16 @@ const router = createRouter({
 // =========================================================
 
 router.beforeEach(async (to) => {
-  console.log('[guard] navigating to:', to.fullPath, 'meta:', to.meta)
-
   if (to.meta.requiresAuth) {
     const {
       data: { user },
       error,
     } = await supabase.auth.getUser()
 
-    console.log('[guard] requiresAuth — user:', user, 'error:', error)
-
     if (error || !user) {
-      console.log('[guard] BLOCKED, redirecting to /')
       return '/'
     }
 
-    console.log('[guard] ALLOWED')
     return true
   }
 
@@ -130,7 +124,6 @@ router.beforeEach(async (to) => {
 // =========================================================
 
 supabase.auth.onAuthStateChange((event) => {
-  console.log('[auth] event:', event)
   if (event === 'SIGNED_OUT') {
     if (router.currentRoute.value.path !== '/') {
       router.replace('/')
