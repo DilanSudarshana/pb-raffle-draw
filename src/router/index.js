@@ -65,6 +65,11 @@ const routes = [
         name: 'Dashboard',
         component: () => import('@/views/dashboard/Dashboard.vue'),
       },
+      {
+        path: 'participants',
+        name: 'Participants',
+        component: () => import('@/views/admin/participants/participant_main.vue'),
+      },
     ],
   },
 
