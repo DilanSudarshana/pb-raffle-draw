@@ -7,7 +7,7 @@
                         <i class="mdi mdi-account-edit-outline me-2"></i>
                         UPDATE PARTICIPANT
                     </h6>
-                    <router-link to="/master/participants/list">
+                    <router-link to="/admin/participants">
                         <button class="btn btn-sm btn-outline-secondary">
                             <i class="mdi mdi-arrow-left me-1"></i>
                             Back to List
@@ -172,7 +172,9 @@ export default {
                 fullName.value = data.name
                 idNumber.value = data.id_number
                 qualified.value = data.qualified
-                quizAttempted.value = data.quiz_attempted
+                // Force to a real 0/1 number regardless of what type comes back
+                // from Supabase (string, boolean-ish, null, etc.)
+                quizAttempted.value = Number(data.quiz_attempted) === 1 ? 1 : 0
                 quizStartedAt.value = toLocalInputValue(data.quiz_started_at)
                 quizCompletedAt.value = toLocalInputValue(data.quiz_completed_at)
                 createdAt.value = data.created_at
@@ -225,13 +227,17 @@ export default {
                     return
                 }
 
+                // Force quiz_attempted to a clean integer 0/1 before sending to Supabase,
+                // so it always matches the int column regardless of dropdown state.
+                const quizAttemptedValue = Number(quizAttempted.value) === 1 ? 1 : 0
+
                 const { error: updateError } = await supabase
                     .from('participants')
                     .update({
                         name: trimmedName,
                         id_number: trimmedId,
                         qualified: qualified.value,
-                        quiz_attempted: quizAttempted.value,
+                        quiz_attempted: quizAttemptedValue,
                         quiz_started_at: quizStartedAt.value ? new Date(quizStartedAt.value).toISOString() : null,
                         quiz_completed_at: quizCompletedAt.value ? new Date(quizCompletedAt.value).toISOString() : null,
                     })

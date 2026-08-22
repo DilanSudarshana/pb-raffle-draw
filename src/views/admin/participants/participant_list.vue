@@ -70,8 +70,8 @@
                                 </td>
                                 <td class="hide-mobile">{{ row.id_number }}</td>
                                 <td class="hide-mobile">
-                                    <CBadge :color="participant?.quiz_attempted == 1 ? 'success' : 'secondary'">
-                                        {{ participant?.quiz_attempted == 1 ? 'Yes' : 'No' }}
+                                    <CBadge :color="row.quiz_attempted === 1 ? 'success' : 'secondary'">
+                                        {{ row.quiz_attempted === 1 ? 'Yes' : 'No' }}
                                     </CBadge>
                                 </td>
                                 <td class="hide-mobile">{{ formatDateTime(row.quiz_started_at) }}</td>
