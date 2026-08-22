@@ -70,6 +70,11 @@ const routes = [
         name: 'Participants',
         component: () => import('@/views/admin/participants/participant_main.vue'),
       },
+      {
+        path: 'participants/:id',
+        name: 'ParticipantView',
+        component: () => import('@/views/admin/participants/participant_update.vue'),
+      },
     ],
   },
 

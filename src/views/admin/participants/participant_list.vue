@@ -91,20 +91,14 @@
                                             @click="toggleQualified(row)">
                                             <i class="mdi mdi-swap-horizontal"></i>
                                         </button>
-                                        <a :href="`/master/participants/view?mobile=${row.mobile}`">
-                                            <button class="btn btn-sm btn-outline-primary" title="View">
-                                                <i class="mdi mdi-eye-outline"></i>
-                                            </button>
-                                        </a>
-                                        <a :href="`/master/participants/edit?mobile=${row.mobile}`">
-                                            <button class="btn btn-sm btn-outline-secondary" title="Edit">
-                                                <i class="mdi mdi-pencil-outline"></i>
-                                            </button>
-                                        </a>
-                                        <button class="btn btn-sm btn-outline-danger" title="Delete"
+                                        <router-link :to="{ name: 'ParticipantView', params: { id: row.mobile } }"
+                                            class="btn btn-sm btn-outline-primary" title="View">
+                                            <i class="mdi mdi-eye-outline"></i>
+                                        </router-link>
+                                        <!-- <button class="btn btn-sm btn-outline-danger" title="Delete"
                                             @click="deleteParticipant(row.mobile)">
                                             <i class="mdi mdi-delete-outline"></i>
-                                        </button>
+                                        </button> -->
                                     </div>
                                 </td>
                             </tr>
