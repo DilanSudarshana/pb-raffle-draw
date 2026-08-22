@@ -47,14 +47,35 @@
                             <p class="intro-desc">You qualified with a perfect score — spin the wheel for your prize.
                             </p>
                             <div v-if="alertMsg" class="alert-box">{{ alertMsg }}</div>
-                            <div class="wheel-wrap">
-                                <div class="wheel-pointer"></div>
-                                <div class="wheel" :style="wheelStyle">
-                                    <span v-for="(p, i) in wheelPrizes" :key="p.id" class="wheel-label"
-                                        :style="labelStyle(i)">{{ p.name }}</span>
+
+                            <div class="wheel-stage">
+                                <div class="wheel-wrap" ref="wheelWrapEl" :style="{ '--wheel-size': wheelSize + 'px' }">
+                                    <div class="wheel-pointer"></div>
+
+                                    <!-- ring of gold marquee bulbs around the rim -->
+                                    <div class="wheel-lights">
+                                        <span v-for="i in LIGHT_COUNT" :key="'light-' + i" class="light-bulb"
+                                            :style="lightStyle(i)">
+                                            <span class="light-bulb-dot"
+                                                :style="{ animationDelay: `${-((i - 1) / LIGHT_COUNT) * CHASE_DURATION_S}s` }"></span>
+                                        </span>
+                                    </div>
+
+                                    <div class="wheel" :style="wheelStyle">
+                                        <span v-for="(p, i) in wheelPrizes" :key="p.id" class="wheel-label"
+                                            :style="labelStyle(i)">{{ p.name }}</span>
+                                    </div>
+
+                                    <div class="wheel-center-mark"><span class="hub-star">✦</span></div>
                                 </div>
-                                <div class="wheel-center-mark">PB</div>
+
+                                <!-- pedestal stand under the wheel -->
+                                <div class="wheel-stand">
+                                    <div class="stand-neck"></div>
+                                    <div class="stand-base"></div>
+                                </div>
                             </div>
+
                             <button class="btn-primary kiosk-btn" :disabled="spinning || !wheelPrizes.length || !mobile"
                                 @click="spin">
                                 {{ spinning ? 'DRAWING...' : 'SPIN THE WHEEL' }}
@@ -97,7 +118,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 
@@ -134,9 +155,48 @@ onMounted(() => {
 // are drawn evenly for display; the actual winner is picked using each
 // prize's `weight`, restricted to prizes that still have stock at spin time.
 const wheelPrizes = ref([])
-const wheelColors = ['#e53935', '#43a047', '#FFD700', '#2e7d32', '#f57f17', '#c62828', '#1565c0', '#6a1b9a', '#00838f', '#ad1457']
 const spinning = ref(false)
 const wheelRotation = ref(0)
+
+// Classic casino wheel palette: alternating red / cream wedges instead of a
+// rainbow of colors, so the wheel matches the reference "jackpot" wheel look.
+const WHEEL_COLOR_A = '#c62828' // deep casino red
+const WHEEL_COLOR_B = '#fdf6e3' // warm cream/white
+
+// Number of gold marquee bulbs drawn around the rim
+const LIGHT_COUNT = 20
+// How long one full lap of the chase-light animation takes
+const CHASE_DURATION_S = 1.6
+
+// The wheel is sized in viewport units, capped to fit both the card width
+// and the overall 100vh page budget, so its pixel size varies with screen size. All the label/bulb placement
+// math below was originally tuned for a fixed 300px wheel; wheelSize tracks
+// the real rendered size so everything scales together instead of drifting
+// off the rim on larger or smaller screens.
+const wheelWrapEl = ref(null)
+const wheelSize = ref(300)
+let resizeObserver = null
+
+onMounted(() => {
+    if (wheelWrapEl.value && typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver((entries) => {
+            const w = entries[0]?.contentRect?.width
+            if (w) wheelSize.value = w
+        })
+        resizeObserver.observe(wheelWrapEl.value)
+    }
+})
+
+onBeforeUnmount(() => {
+    if (resizeObserver) {
+        resizeObserver.disconnect()
+        resizeObserver = null
+    }
+})
+
+// All the geometry below was tuned against a 300px reference wheel; scaling
+// by wheelSize/300 keeps the same proportions at any rendered size.
+const scaleFactor = computed(() => wheelSize.value / 300)
 
 // The visual spin (CSS transition below) and the reveal timeout must agree —
 // change both together if you want a different draw duration.
@@ -146,20 +206,32 @@ const SPIN_TURNS = 10 // full rotations before landing; higher = feels slower/mo
 // Smaller font as segment count grows, so longer prize names don't collide
 const labelFontSizePx = computed(() => {
     const n = wheelPrizes.value.length || 1
-    if (n <= 4) return 13
-    if (n <= 6) return 12
-    if (n <= 8) return 11
-    return 10
+    let base = 13
+    if (n > 8) base = 10
+    else if (n > 6) base = 11
+    else if (n > 4) base = 12
+    return Math.round(base * scaleFactor.value)
 })
 
 const wheelStyle = computed(() => {
     const n = wheelPrizes.value.length || 1
     const seg = 360 / n
     const stops = wheelPrizes.value
-        .map((p, i) => `${wheelColors[i % wheelColors.length]} ${i * seg}deg ${(i + 1) * seg}deg`)
+        .map((p, i) => `${i % 2 === 0 ? WHEEL_COLOR_A : WHEEL_COLOR_B} ${i * seg}deg ${(i + 1) * seg}deg`)
         .join(',')
+
+    if (!wheelPrizes.value.length) {
+        return { background: '#333', transform: `rotate(${wheelRotation.value}deg)` }
+    }
+
+    // Thin gold spokes drawn on every segment boundary, layered on top of the
+    // wedge colors. Without these the flat two-tone conic-gradient reads as a
+    // muddy blob rather than distinct casino wedges.
+    const spokeWidthDeg = Math.max(0.6, Math.min(1.6, seg * 0.04))
+    const spokes = `repeating-conic-gradient(from ${-spokeWidthDeg / 2}deg, rgba(255, 215, 0, 0.95) 0deg ${spokeWidthDeg}deg, transparent ${spokeWidthDeg}deg ${seg}deg)`
+
     return {
-        background: wheelPrizes.value.length ? `conic-gradient(${stops})` : '#333',
+        background: `${spokes}, conic-gradient(${stops})`,
         transform: `rotate(${wheelRotation.value}deg)`,
     }
 })
@@ -168,13 +240,25 @@ function labelStyle(i) {
     const n = wheelPrizes.value.length || 1
     const seg = 360 / n
     const mid = i * seg + seg / 2
-    const radius = 118
+    const radius = 118 * scaleFactor.value
+    const onRed = i % 2 === 0
     // translateX(-50%) at the end centers the label on the radial line instead
     // of left-anchoring it — that left-anchoring was the main cause of the
     // crooked/overlapping look on longer prize names.
     return {
         transform: `rotate(${mid}deg) translateY(-${radius}px) rotate(${-mid}deg) translateX(-50%)`,
         fontSize: `${labelFontSizePx.value}px`,
+        color: onRed ? '#fff' : '#7a1414',
+        textShadow: onRed ? '0 1px 2px rgba(0,0,0,0.75)' : '0 1px 1px rgba(255,255,255,0.5)',
+    }
+}
+
+// Positions the small gold marquee bulbs evenly around the wheel rim.
+function lightStyle(i) {
+    const angle = (360 / LIGHT_COUNT) * (i - 1)
+    const radius = 147 * scaleFactor.value
+    return {
+        transform: `rotate(${angle}deg) translateY(-${radius}px)`,
     }
 }
 
@@ -314,8 +398,8 @@ async function spin() {
 }
 
 function finish() {
-    // send the kiosk back to the quiz landing page for the next participant
-    router.push({ name: 'quiz' })
+    // send the kiosk back to the kiosk landing route for the next participant
+    router.push({ name: 'kiosk' })
 }
 </script>
 
@@ -333,7 +417,9 @@ function finish() {
         linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
     position: relative;
     overflow: hidden;
-    padding: 3rem 0;
+    height: 100vh;
+    justify-content: center;
+    padding: 0.75rem 0;
 }
 
 .kiosk-wrapper::before {
@@ -421,14 +507,14 @@ function finish() {
 
 .logo-wrapper {
     position: relative;
-    width: 90px;
-    height: 90px;
-    margin: 0 auto 1.5rem;
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 0.5rem;
 }
 
 .logo-ring-outer {
-    width: 90px;
-    height: 90px;
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
     padding: 3px;
     background: conic-gradient(#e53935 0deg 120deg, #43a047 120deg 240deg, #FFD700 240deg 360deg);
@@ -456,28 +542,28 @@ function finish() {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 110px;
-    height: 110px;
-    margin-top: -55px;
-    margin-left: -55px;
+    width: 68px;
+    height: 68px;
+    margin-top: -34px;
+    margin-left: -34px;
     border-radius: 50%;
     animation: rotate 4s linear infinite;
 }
 
 .orbit-2 {
-    width: 126px;
-    height: 126px;
-    margin-top: -63px;
-    margin-left: -63px;
+    width: 78px;
+    height: 78px;
+    margin-top: -39px;
+    margin-left: -39px;
     animation-duration: 6s;
     animation-direction: reverse;
 }
 
 .orbit-3 {
-    width: 142px;
-    height: 142px;
-    margin-top: -71px;
-    margin-left: -71px;
+    width: 90px;
+    height: 90px;
+    margin-top: -45px;
+    margin-left: -45px;
     animation-duration: 9s;
 }
 
@@ -507,11 +593,11 @@ function finish() {
 }
 
 .header-title {
-    font-size: 1.15rem;
+    font-size: 0.95rem;
     font-weight: 800;
     letter-spacing: 0.06em;
-    line-height: 1.3;
-    margin-bottom: 0.4rem;
+    line-height: 1.25;
+    margin-bottom: 0.25rem;
     background: linear-gradient(135deg, #e53935 0%, #FFD700 50%, #43a047 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -521,10 +607,10 @@ function finish() {
 }
 
 .brand-name {
-    font-size: 1.4rem;
+    font-size: 1.15rem;
     font-weight: 900;
     letter-spacing: 0.06em;
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.2rem;
     background: linear-gradient(90deg, #FFD700, #43a047, #e53935, #FFD700);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -544,7 +630,7 @@ function finish() {
 .tricolor-divider {
     display: flex;
     gap: 4px;
-    margin: 1rem auto;
+    margin: 0.5rem auto;
     width: 60px;
     justify-content: center;
 }
@@ -572,7 +658,7 @@ function finish() {
     background: rgba(15, 15, 26, 0.88);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 20px;
-    padding: 2rem;
+    padding: 1.1rem 1.5rem;
     backdrop-filter: blur(20px);
     box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.08), 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 80px rgba(229, 57, 53, 0.06);
     position: relative;
@@ -616,16 +702,16 @@ function finish() {
 }
 
 .intro-title {
-    font-size: 1.3rem;
+    font-size: 1.1rem;
     font-weight: 800;
     color: #fff;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.3rem;
 }
 
 .intro-desc {
     color: rgba(255, 255, 255, 0.55);
-    font-size: 0.9rem;
-    margin-bottom: 1.5rem;
+    font-size: 0.82rem;
+    margin-bottom: 0.5rem;
 }
 
 .btn-outline {
@@ -660,7 +746,7 @@ function finish() {
     align-items: center;
     gap: 8px;
     justify-content: center;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
 }
 
 .section-line {
@@ -675,26 +761,73 @@ function finish() {
     color: #FFD700;
 }
 
+.wheel-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
 .wheel-wrap {
+    --wheel-size: 300px;
     position: relative;
-    width: 300px;
-    height: 300px;
-    margin: 1.5rem auto;
-    max-width: 100%;
+    width: min(100%, clamp(200px, 42vh, 480px));
+    aspect-ratio: 1 / 1;
+    margin: 0.5rem auto 0;
+}
+
+/* Pulsing colored halo behind the wheel for a game-cabinet glow */
+.wheel-wrap::before {
+    content: '';
+    position: absolute;
+    inset: -10%;
+    z-index: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 215, 0, 0.4), rgba(229, 57, 53, 0.28) 55%, transparent 75%);
+    filter: blur(18px);
+    animation: glowPulse 2.4s ease-in-out infinite;
+    pointer-events: none;
 }
 
 .wheel-pointer {
     position: absolute;
-    top: -12px;
+    top: calc(var(--wheel-size) * -0.047);
     left: 50%;
     transform: translateX(-50%);
     width: 0;
     height: 0;
-    border-left: 14px solid transparent;
-    border-right: 14px solid transparent;
-    border-top: 22px solid #FFD700;
+    border-left: calc(var(--wheel-size) * 0.047) solid transparent;
+    border-right: calc(var(--wheel-size) * 0.047) solid transparent;
+    border-top: calc(var(--wheel-size) * 0.08) solid #FFD700;
     filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
-    z-index: 2;
+    z-index: 4;
+}
+
+/* Gold marquee bulbs ringing the wheel rim */
+.wheel-lights {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+}
+
+.light-bulb {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+}
+
+.light-bulb-dot {
+    position: absolute;
+    width: calc(var(--wheel-size) * 0.03);
+    height: calc(var(--wheel-size) * 0.03);
+    margin-left: calc(var(--wheel-size) * -0.015);
+    margin-top: calc(var(--wheel-size) * -0.015);
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fffbe0, #FFD700 60%, #b8860b 100%);
+    box-shadow: 0 0 6px 2px rgba(255, 215, 0, 0.85);
+    animation: twinkle 1.6s ease-in-out infinite;
 }
 
 .wheel {
@@ -702,11 +835,25 @@ function finish() {
     height: 100%;
     border-radius: 50%;
     position: relative;
+    z-index: 1;
     overflow: hidden;
     /* Duration here must stay in sync with SPIN_DURATION_MS in the script (15s). */
     transition: transform 15s cubic-bezier(0.1, 0.7, 0.15, 1);
-    border: 4px solid rgba(255, 255, 255, 0.15);
-    box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.15), inset 0 0 30px rgba(0, 0, 0, 0.35);
+    border: calc(var(--wheel-size) * 0.027) solid #FFD700;
+    box-shadow:
+        0 0 0 3px #7a1414,
+        0 0 0 4px rgba(255, 215, 0, 0.35),
+        0 10px 30px rgba(0, 0, 0, 0.55),
+        inset 0 0 25px rgba(0, 0, 0, 0.35);
+}
+
+.wheel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at 50% 16%, rgba(255, 255, 255, 0.32), transparent 55%);
+    pointer-events: none;
 }
 
 .wheel-label {
@@ -715,8 +862,6 @@ function finish() {
     left: 50%;
     transform-origin: 0 0;
     font-weight: 700;
-    color: #fff;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
     white-space: nowrap;
     max-width: 96px;
     overflow: hidden;
@@ -730,19 +875,49 @@ function finish() {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 48px;
-    height: 48px;
+    width: calc(var(--wheel-size) * 0.18);
+    height: calc(var(--wheel-size) * 0.18);
     border-radius: 50%;
-    background: #1a1a2e;
-    border: 3px solid #FFD700;
-    box-shadow: 0 0 0 4px rgba(15, 15, 26, 0.9), 0 4px 10px rgba(0, 0, 0, 0.5);
+    background: radial-gradient(circle at 35% 30%, #fff6c9, #FFD700 45%, #b8860b 100%);
+    border: calc(var(--wheel-size) * 0.01) solid #7a1414;
+    box-shadow: 0 0 0 calc(var(--wheel-size) * 0.013) rgba(15, 15, 26, 0.9), 0 4px 10px rgba(0, 0, 0, 0.5);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #FFD700;
-    font-weight: 800;
-    font-size: 0.8rem;
     z-index: 2;
+}
+
+.hub-star {
+    color: #7a1414;
+    font-size: calc(var(--wheel-size) * 0.038);
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.4);
+}
+
+/* Pedestal stand beneath the wheel */
+.wheel-stand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: min(100%, clamp(200px, 42vh, 480px));
+    margin-top: -4px;
+}
+
+.stand-neck {
+    width: 14%;
+    aspect-ratio: 42 / 26;
+    background: linear-gradient(180deg, #c62828, #7a1414);
+    clip-path: polygon(22% 0%, 78% 0%, 100% 100%, 0% 100%);
+    border-left: 2px solid rgba(255, 215, 0, 0.4);
+    border-right: 2px solid rgba(255, 215, 0, 0.4);
+}
+
+.stand-base {
+    width: 38%;
+    aspect-ratio: 116 / 16;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #e53935, #8b0000);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.25);
+    border: 1px solid rgba(255, 215, 0, 0.5);
 }
 
 .btn-primary.kiosk-btn {
@@ -752,7 +927,7 @@ function finish() {
     border-radius: 10px;
     font-weight: 700;
     font-size: 0.9rem;
-    padding: 12px 24px;
+    padding: 10px 24px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: #fff;
@@ -760,8 +935,13 @@ function finish() {
     align-items: center;
     justify-content: center;
     gap: 8px;
+    margin-top: 0.75rem;
     transition: background-position 0.5s ease, transform 0.2s ease;
     width: 100%;
+}
+
+.btn-primary.kiosk-btn:not(:disabled) {
+    animation: ctaGlow 2s ease-in-out infinite;
 }
 
 .btn-primary.kiosk-btn:hover:not(:disabled) {
@@ -771,6 +951,7 @@ function finish() {
 .btn-primary.kiosk-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    animation: none;
 }
 
 /* Prize */
@@ -803,7 +984,7 @@ function finish() {
 .card-footer-stripe {
     display: flex;
     height: 4px;
-    margin: 2rem -2rem -2rem;
+    margin: 0.9rem -1.5rem -1.1rem;
     border-radius: 0 0 20px 20px;
     overflow: hidden;
 }
@@ -850,6 +1031,44 @@ function finish() {
 
     to {
         transform: translate(30px, 20px) scale(1.08);
+    }
+}
+
+@keyframes twinkle {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+@keyframes glowPulse {
+
+    0%,
+    100% {
+        opacity: 0.6;
+        transform: scale(0.96);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1.05);
+    }
+}
+
+@keyframes ctaGlow {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 rgba(255, 215, 0, 0);
+    }
+
+    50% {
+        box-shadow: 0 0 18px 4px rgba(255, 215, 0, 0.55);
     }
 }
 </style>
