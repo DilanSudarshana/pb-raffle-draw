@@ -32,6 +32,12 @@ const routes = [
   },
 
   {
+    path: '/raffle_draw',
+    name: 'raffle_draw',
+    component: () => import('@/views/raffle_draw/raffle_draw.vue'),
+  },
+
+  {
     path: '/admin/login',
     name: 'Login',
     component: () => import('@/views/authentication/login.vue'),

@@ -42,44 +42,57 @@
                         <CForm v-if="!referenceCode" @submit.prevent="handleRegister" class="login-form">
                             <p class="form-heading text-center">Register to Participate</p>
 
+                            <!-- Full Name -->
                             <div class="field-group mb-3">
                                 <CInputGroup>
                                     <CInputGroupText class="input-icon">
                                         <CIcon icon="cil-user" />
                                     </CInputGroupText>
+
                                     <CFormInput id="fullName" v-model="fullName" placeholder="Full Name" type="text"
                                         autocomplete="name" class="form-control-custom" required :disabled="loading" />
                                 </CInputGroup>
                             </div>
 
+                            <!-- ID Number -->
                             <div class="field-group mb-3">
                                 <CInputGroup>
                                     <CInputGroupText class="input-icon">
-                                        <CIcon icon="cil-credit-card" />
+                                        <CIcon icon="cil-notes" />
                                     </CInputGroupText>
+
                                     <CFormInput id="idNumber" v-model="idNumber" placeholder="ID Number" type="text"
                                         class="form-control-custom" required :disabled="loading" />
                                 </CInputGroup>
                             </div>
 
+                            <!-- Mobile Number -->
                             <div class="field-group mb-4">
                                 <CInputGroup>
                                     <CInputGroupText class="input-icon">
-                                        <CIcon icon="cil-phone" />
+                                        <CIcon icon="cil-people" />
                                     </CInputGroupText>
+
                                     <CFormInput id="mobileNumber" v-model="mobileNumber" placeholder="Mobile Number"
                                         type="tel" autocomplete="tel" class="form-control-custom" required
                                         :disabled="loading" @input="mobileError = ''" />
                                 </CInputGroup>
-                                <p v-if="mobileError" class="field-error">{{ mobileError }}</p>
+
+                                <p v-if="mobileError" class="field-error">
+                                    {{ mobileError }}
+                                </p>
                             </div>
 
+                            <!-- Register Button -->
                             <CButton type="submit" class="login-btn w-100"
                                 :disabled="loading || !fullName || !idNumber || !mobileNumber">
                                 <span v-if="loading" class="spinner-border spinner-border-sm me-2" role="status"
                                     aria-hidden="true"></span>
-                                <span class="btn-text">{{ loading ? 'Registering...' : 'Register & Get Reference'
-                                    }}</span>
+
+                                <span class="btn-text">
+                                    {{ loading ? 'Registering...' : 'Register & Get Reference' }}
+                                </span>
+
                                 <i v-if="!loading" class="mdi mdi-arrow-right btn-arrow"></i>
                             </CButton>
                         </CForm>
@@ -120,7 +133,7 @@
 
 <script>
 import { ref, onMounted } from 'vue'
-import { supabase } from '@/lib/supabase' // adjust path to your Supabase client
+import { supabase } from '@/lib/supabase'
 
 export default {
     name: 'RegistrationComponent',
@@ -150,14 +163,6 @@ export default {
                 timer,
                 timerProgressBar: true,
             })
-        }
-
-        // Reference is generated client-side for display only —
-        // the participants table has no reference_code column to persist it.
-        const generateReference = () => {
-            const stamp = Date.now().toString(36).toUpperCase().slice(-4)
-            const rand = Math.random().toString(36).toUpperCase().slice(2, 6)
-            return `FTW-${stamp}${rand}`
         }
 
         const validateMobile = () => {
@@ -221,7 +226,8 @@ export default {
                     throw insertError
                 }
 
-                referenceCode.value = generateReference()
+                // Reference number = the participant's own mobile number
+                referenceCode.value = normalizedMobile
 
                 await showToast({
                     icon: 'success',

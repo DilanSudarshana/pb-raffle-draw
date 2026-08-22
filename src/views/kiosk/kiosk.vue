@@ -39,22 +39,48 @@
                     <!-- ===================== MAIN CARD ===================== -->
                     <div class="kiosk-card" :class="{ 'card-loaded': isLoaded }">
 
-                        <!-- ---------- REFERENCE SCREEN ---------- -->
-                        <div v-if="screen === 'reference'" class="intro-hero">
+                        <!-- ---------- LANGUAGE SELECT SCREEN ---------- -->
+                        <div v-if="screen === 'language'" class="intro-hero">
                             <div class="intro-icon-wrap">
                                 <div class="intro-ring"></div>
                                 <div class="intro-ring ir2"></div>
-                                <div class="intro-icon">🎯</div>
+                                <div class="intro-icon">🌐</div>
+                            </div>
+                            <h2 class="intro-title">Choose Your Language</h2>
+                            <p class="intro-desc">Select a language to begin the challenge.</p>
+
+                            <div class="lang-list">
+                                <button v-for="l in langOptions" :key="l.code" class="lang-btn" :disabled="loading"
+                                    @click="chooseLanguage(l.code)">
+                                    <span>{{ l.label }}</span>
+                                    <i class="mdi mdi-arrow-right btn-arrow"></i>
+                                </button>
+                            </div>
+
+                            <div v-if="alertMsg" class="alert-box">{{ alertMsg }}</div>
+                        </div>
+
+                        <!-- ---------- MOBILE ENTRY SCREEN ---------- -->
+                        <div v-else-if="screen === 'reference'" class="intro-hero">
+                            <div class="intro-icon-wrap">
+                                <div class="intro-ring"></div>
+                                <div class="intro-ring ir2"></div>
+                                <div class="intro-icon">🏆</div>
                             </div>
                             <h2 class="intro-title">Ready for the Challenge?</h2>
-                            <p class="intro-desc">Enter the reference number received after registration.</p>
+                            <p class="intro-desc">Enter your mobile number to start the quiz.</p>
 
-                            <CForm @submit.prevent="submitReference" class="kiosk-form">
+                            <button class="lang-chip" @click="screen = 'language'">
+                                <i class="mdi mdi-web"></i> {{ currentLangLabel }} · change
+                            </button>
+
+                            <CForm @submit.prevent="submitMobile" class="kiosk-form">
                                 <div class="field-group mb-3">
-                                    <CFormInput v-model="reference" class="reference-input" required
-                                        placeholder="PB-XXXXXX-XXXX" autocomplete="off" :disabled="loading" />
+                                    <CFormInput v-model="mobile" class="reference-input" required type="tel"
+                                        inputmode="numeric" maxlength="10" placeholder="07XXXXXXXX" autocomplete="off"
+                                        :disabled="loading" @input="mobile = mobile.replace(/[^0-9]/g, '')" />
                                 </div>
-                                <CButton type="submit" class="login-btn w-100" :disabled="loading || !reference">
+                                <CButton type="submit" class="login-btn w-100" :disabled="loading || !isValidMobile">
                                     <span v-if="loading" class="spinner-border spinner-border-sm me-2" role="status"
                                         aria-hidden="true"></span>
                                     <span class="btn-text">{{ loading ? 'Checking...' : 'Start Challenge' }}</span>
@@ -83,7 +109,7 @@
                                 </div>
                             </div>
 
-                            <div class="q-tag">FINTECH KNOWLEDGE</div>
+                            <div class="q-tag">FINTECH KNOWLEDGE &middot; {{ currentLangLabel }}</div>
                             <div class="q-text">{{ currentQuestion?.question_text }}</div>
 
                             <div class="options-list">
@@ -107,40 +133,23 @@
                         <div v-else-if="screen === 'result'" class="result-center">
                             <div class="result-icon-wrap">
                                 <div class="result-ring"></div>
-                                <div class="result-icon">🏆</div>
+                                <div class="result-icon">{{ passed ? '🏆' : '😕' }}</div>
                             </div>
                             <h2 class="intro-title">{{ resultTitle }}</h2>
                             <p class="intro-desc">{{ resultDesc }}</p>
-                            <button v-if="!passed" class="btn-outline" @click="restart">Back to Start</button>
-                        </div>
 
-                        <!-- ---------- WHEEL SCREEN ---------- -->
-                        <div v-else-if="screen === 'wheel'" class="wheel-center">
-                            <div class="section-label"><span class="section-line"></span><span
-                                    class="section-text">RAFFLE DRAW</span><span class="section-line"></span></div>
-                            <h2 class="intro-title">Good Luck!</h2>
-                            <div class="wheel-wrap">
-                                <div class="wheel-pointer"></div>
-                                <div class="wheel" :style="wheelStyle">
-                                    <span v-for="(p, i) in wheelPrizes" :key="p.name + i" class="wheel-label"
-                                        :style="labelStyle(i)">{{ p.name }}</span>
-                                </div>
-                                <div class="wheel-center-mark">PB</div>
+                            <!-- pass state: brief transition message while we hand off to the raffle page -->
+                            <div v-if="passed" class="redirect-hint">
+                                <span class="spinner-border spinner-border-sm me-2" role="status"
+                                    aria-hidden="true"></span>
+                                Opening the raffle draw...
                             </div>
-                            <button class="btn-primary kiosk-btn" :disabled="spinning" @click="spin">
-                                {{ spinning ? 'DRAWING...' : 'SPIN THE WHEEL' }}
-                            </button>
-                        </div>
 
-                        <!-- ---------- PRIZE SCREEN ---------- -->
-                        <div v-else-if="screen === 'prize'" class="result-center">
-                            <div class="prize-burst">🎉</div>
-                            <p class="header-sub">YOUR RESULT</p>
-                            <h2 class="prize-title">{{ prize?.prize_name }}</h2>
-                            <p class="intro-desc">{{ prize?.description || 'Thank you for participating.' }}</p>
-                            <div v-if="prize && Number(prize.is_winner)" class="winner-badge">★ WINNER — PLEASE COLLECT
-                                YOUR GIFT ★</div>
-                            <button class="btn-primary kiosk-btn" @click="restart">Finish</button>
+                            <!-- fail state: "better luck next time" stays right here -->
+                            <template v-else>
+                                <div class="better-luck-badge">Better luck next time!</div>
+                                <button class="btn-outline" @click="restart">Back to Start</button>
+                            </template>
                         </div>
 
                         <div class="card-footer-stripe">
@@ -158,11 +167,13 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
+import { supabase } from '@/lib/supabase'
 
-const APP_BASE = import.meta.env.VITE_API_BASE_URL || ''
+const router = useRouter()
 
 // ---------- screen state ----------
-const screen = ref('reference') // reference | quiz | result | wheel | prize
+const screen = ref('language') // language | reference | quiz | result
 const isLoaded = ref(false)
 const loading = ref(false)
 const alertMsg = ref('')
@@ -171,25 +182,101 @@ onMounted(() => {
     setTimeout(() => { isLoaded.value = true }, 120)
 })
 
-// ---------- reference ----------
-const reference = ref('')
+// ---------- language selection ----------
+const langOptions = [
+    { code: 1, label: 'English' },
+    { code: 2, label: 'සිංහල' },
+    { code: 3, label: 'தமிழ்' },
+]
+const selectedLang = ref(null)
 
-const submitReference = async () => {
+const currentLangLabel = computed(() => {
+    return langOptions.find(l => l.code === selectedLang.value)?.label || ''
+})
+
+function chooseLanguage(code) {
+    selectedLang.value = code
+    alertMsg.value = ''
+    screen.value = 'reference'
+}
+
+// ---------- mobile number entry ----------
+const mobile = ref('')
+const participantName = ref('') // pulled from participants.name once looked up
+
+const isValidMobile = computed(() => /^0\d{9}$/.test(mobile.value))
+
+function shuffle(arr) {
+    const a = [...arr]
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+            ;[a[i], a[j]] = [a[j], a[i]]
+    }
+    return a
+}
+
+const submitMobile = async () => {
+    if (!isValidMobile.value) {
+        alertMsg.value = 'Please enter a valid 10-digit mobile number.'
+        return
+    }
+    if (!selectedLang.value) {
+        alertMsg.value = 'Please select a language first.'
+        screen.value = 'language'
+        return
+    }
+
     loading.value = true
     alertMsg.value = ''
     try {
-        const fd = new FormData()
-        fd.append('reference', reference.value)
-        const r = await fetch(`${APP_BASE}/api/kiosk/reference`, { method: 'POST', body: fd })
-        const d = await r.json()
-        if (!d.ok) {
-            alertMsg.value = d.message
+        // 1. Participant must already be registered
+        const { data: participant, error: pErr } = await supabase
+            .from('participants')
+            .select('mobile, name, id_number, quiz_attempted, qualified')
+            .eq('mobile', mobile.value)
+            .maybeSingle()
+
+        if (pErr) {
+            alertMsg.value = `Participant lookup failed: ${pErr.message}`
             return
         }
-        attemptQuestions.value = d.questions
+
+        if (!participant) {
+            alertMsg.value = 'This mobile number is not registered. Please register first.'
+            return
+        }
+
+        // quiz_attempted is an integer counter (0 = not attempted yet)
+        if (participant.quiz_attempted && participant.quiz_attempted > 0) {
+            alertMsg.value = 'You have already participated in this quiz.'
+            return
+        }
+
+        participantName.value = participant.name
+
+        // 2. Pull active questions, pick 3 at random
+        const { data: questions, error: qErr } = await supabase
+            .from('questions')
+            .select('id, question_text, option_a, option_b, option_c, option_d, correct_option, active, lang')
+            .eq('active', true)
+
+        if (qErr) {
+            alertMsg.value = `Question fetch failed: ${qErr.message}`
+            return
+        }
+
+        if (!questions || questions.length < 3) {
+            alertMsg.value = `Not enough active questions available right now. (rows returned: ${questions?.length ?? 0})`
+            return
+        }
+
+        attemptQuestions.value = shuffle(questions).slice(0, 3)
+        score.value = 0
         current.value = 0
         screen.value = 'quiz'
         startQuestion()
+    } catch (e) {
+        alertMsg.value = e.message || 'Something went wrong. Please try again.'
     } finally {
         loading.value = false
     }
@@ -204,6 +291,7 @@ const feedbackClass = ref('')
 const selectedAnswer = ref(null)
 const correctOption = ref(null)
 const quizComplete = ref(false)
+const score = ref(0)
 
 const currentQuestion = computed(() => attemptQuestions.value[current.value])
 const progressPct = computed(() => ((current.value + 1) / attemptQuestions.value.length) * 100)
@@ -253,32 +341,62 @@ async function selectAnswer(letter, timeout = false) {
     clearInterval(timerId)
     selectedAnswer.value = letter
 
-    const fd = new FormData()
-    fd.append('question_id', currentQuestion.value.id)
-    fd.append('answer', letter)
-    const r = await fetch(`${APP_BASE}/api/kiosk/answer`, { method: 'POST', body: fd })
-    const d = await r.json()
+    const q = currentQuestion.value
+    const isCorrect = letter === q.correct_option
+    correctOption.value = q.correct_option
+    if (isCorrect) score.value++
 
-    correctOption.value = d.correct_option
-    feedbackClass.value = d.correct ? 'fb-correct' : 'fb-wrong'
-    feedback.value = d.correct
+    feedbackClass.value = isCorrect ? 'fb-correct' : 'fb-wrong'
+    feedback.value = isCorrect
         ? '✓ Correct! Your answer is correct.'
-        : `✕ Incorrect. ${timeout ? 'Time expired. ' : ''}Correct answer: <strong>Option ${d.correct_option}</strong>.`
+        : `✕ Incorrect. ${timeout ? 'Time expired. ' : ''}Correct answer: <strong>Option ${q.correct_option}</strong>.`
 
-    if (d.complete) {
+    const isLastQuestion = current.value === attemptQuestions.value.length - 1
+    if (isLastQuestion) {
         quizComplete.value = true
-        passed.value = d.passed
-        if (d.passed) {
+        const didPass = score.value === attemptQuestions.value.length
+        passed.value = didPass
+
+        try {
+            // quiz_attempts columns: participant_mobile, question_ids (uuid[]),
+            // score, passed, completed_at — there is NO "mobile" or "lang" column
+            const { error: attemptErr } = await supabase.from('quiz_attempts').insert({
+                participant_mobile: mobile.value,
+                question_ids: attemptQuestions.value.map(q => q.id),
+                score: score.value,
+                passed: didPass,
+                completed_at: new Date().toISOString(),
+            })
+            if (attemptErr) {
+                console.error('quiz_attempts insert failed:', attemptErr.message, attemptErr.details, attemptErr.hint)
+            }
+
+            // quiz_attempted is an INTEGER column, not boolean — send 1, not true
+            const { error: updateErr } = await supabase
+                .from('participants')
+                .update({ quiz_attempted: 1, qualified: didPass, quiz_completed_at: new Date().toISOString() })
+                .eq('mobile', mobile.value)
+            if (updateErr) {
+                console.error('participants update failed:', updateErr.message, updateErr.details, updateErr.hint)
+            }
+        } catch (e) {
+            console.error('Failed to save quiz attempt:', e)
+        }
+
+        if (didPass) {
             resultTitle.value = 'Excellent! You Qualified!'
-            resultDesc.value = 'All 3 answers are correct. Opening the raffle draw...'
+            resultDesc.value = 'All 3 answers are correct. Get ready for the raffle draw...'
             screen.value = 'result'
+            // hand off to the raffle draw page, carrying the participant along
             setTimeout(() => {
-                screen.value = 'wheel'
-                loadWheel()
-            }, 1000)
+                router.push({
+                    name: 'raffle_draw',
+                    query: { mobile: mobile.value, name: participantName.value },
+                })
+            }, 1200)
         } else {
             resultTitle.value = 'Challenge Complete'
-            resultDesc.value = 'You need all 3 correct answers to unlock the raffle. Thank you for participating.'
+            resultDesc.value = 'You need all 3 correct answers to unlock the raffle draw.'
             screen.value = 'result'
         }
     }
@@ -291,83 +409,21 @@ function nextQuestion() {
 
 function restart() {
     clearInterval(timerId)
-    reference.value = ''
+    mobile.value = ''
+    participantName.value = ''
     alertMsg.value = ''
     attemptQuestions.value = []
     current.value = 0
+    score.value = 0
     quizComplete.value = false
-    wheelPrizes.value = []
-    prize.value = null
-    screen.value = 'reference'
+    selectedLang.value = null
+    screen.value = 'language'
 }
 
 // ---------- result ----------
 const resultTitle = ref('')
 const resultDesc = ref('')
 const passed = ref(false)
-
-// ---------- wheel ----------
-// Wheel sections come live from Admin > Draw Sections, so slice count,
-// names, and colors always match whatever is currently active/in stock.
-const wheelPrizes = ref([])
-const wheelColors = ['#e53935', '#43a047', '#FFD700', '#2e7d32', '#f57f17', '#c62828', '#1565c0', '#6a1b9a', '#00838f', '#ad1457']
-const spinning = ref(false)
-const wheelRotation = ref(0)
-
-const wheelStyle = computed(() => {
-    const n = wheelPrizes.value.length || 1
-    const seg = 360 / n
-    const stops = wheelPrizes.value
-        .map((p, i) => `${wheelColors[i % wheelColors.length]} ${i * seg}deg ${(i + 1) * seg}deg`)
-        .join(',')
-    return {
-        background: wheelPrizes.value.length ? `conic-gradient(${stops})` : '#333',
-        transform: `rotate(${wheelRotation.value}deg)`,
-    }
-})
-
-function labelStyle(i) {
-    const n = wheelPrizes.value.length || 1
-    const seg = 360 / n
-    const mid = i * seg + seg / 2
-    return { transform: `rotate(${mid}deg) translateY(-115px) rotate(${-mid}deg)` }
-}
-
-async function loadWheel() {
-    try {
-        const r = await fetch(`${APP_BASE}/api/kiosk/prizes`)
-        const d = await r.json()
-        wheelPrizes.value = d.ok && d.prizes.length ? d.prizes : []
-    } catch {
-        wheelPrizes.value = []
-    }
-    wheelRotation.value = 0
-}
-
-// ---------- prize ----------
-const prize = ref(null)
-
-async function spin() {
-    spinning.value = true
-    const r = await fetch(`${APP_BASE}/api/kiosk/draw`, { method: 'POST' })
-    const d = await r.json()
-    if (!d.ok) {
-        alert(d.message)
-        spinning.value = false
-        return
-    }
-    const n = wheelPrizes.value.length || 1
-    const seg = 360 / n
-    let idx = wheelPrizes.value.findIndex((p) => p.name === d.prize.prize_name)
-    if (idx < 0) idx = 0
-    wheelRotation.value = 1440 + (360 - (idx * seg + seg / 2))
-
-    setTimeout(() => {
-        prize.value = d.prize
-        screen.value = 'prize'
-        spinning.value = false
-    }, 4200)
-}
 
 onBeforeUnmount(() => {
     clearInterval(timerId)
@@ -644,8 +700,7 @@ onBeforeUnmount(() => {
 }
 
 .intro-hero,
-.result-center,
-.wheel-center {
+.result-center {
     text-align: center;
 }
 
@@ -694,6 +749,59 @@ onBeforeUnmount(() => {
     margin-bottom: 1.5rem;
 }
 
+/* Language select */
+.lang-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 0.5rem;
+}
+
+.lang-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 13px 18px;
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.lang-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #FFD700;
+    transform: translateY(-1px);
+}
+
+.lang-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.lang-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.75rem;
+    padding: 5px 12px;
+    margin-bottom: 1rem;
+    cursor: pointer;
+}
+
+.lang-chip:hover {
+    color: #FFD700;
+    border-color: #FFD700;
+}
+
 .reference-input {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -717,8 +825,7 @@ onBeforeUnmount(() => {
     box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.12);
 }
 
-.login-btn,
-.btn-primary.kiosk-btn {
+.login-btn {
     background: linear-gradient(135deg, #e53935 0%, #c62828 40%, #43a047 70%, #2e7d32 100%);
     background-size: 200% auto;
     border: none;
@@ -737,13 +844,11 @@ onBeforeUnmount(() => {
     width: 100%;
 }
 
-.login-btn:hover:not(:disabled),
-.btn-primary.kiosk-btn:hover:not(:disabled) {
+.login-btn:hover:not(:disabled) {
     transform: translateY(-2px);
 }
 
-.login-btn:disabled,
-.btn-primary.kiosk-btn:disabled {
+.login-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
@@ -755,6 +860,8 @@ onBeforeUnmount(() => {
     color: rgba(255, 255, 255, 0.7);
     padding: 10px 20px;
     font-size: 0.85rem;
+    margin-top: 0.5rem;
+    cursor: pointer;
 }
 
 .btn-outline:hover {
@@ -770,6 +877,28 @@ onBeforeUnmount(() => {
     border: 1px solid rgba(229, 57, 53, 0.3);
     color: #ffb4b0;
     font-size: 0.85rem;
+}
+
+.redirect-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+}
+
+.better-luck-badge {
+    display: inline-block;
+    margin-bottom: 1rem;
+    padding: 8px 18px;
+    border-radius: 20px;
+    background: rgba(229, 57, 53, 0.15);
+    border: 1px solid rgba(229, 57, 53, 0.35);
+    color: #ffb4b0;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.03em;
 }
 
 /* Quiz */
@@ -946,112 +1075,6 @@ onBeforeUnmount(() => {
     font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
-}
-
-/* Wheel */
-.section-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    justify-content: center;
-    margin-bottom: 0.5rem;
-}
-
-.section-line {
-    width: 30px;
-    height: 1px;
-    background: rgba(255, 255, 255, 0.2);
-}
-
-.section-text {
-    font-size: 0.75rem;
-    letter-spacing: 0.1em;
-    color: #FFD700;
-}
-
-.wheel-wrap {
-    position: relative;
-    width: 260px;
-    height: 260px;
-    margin: 1.5rem auto;
-}
-
-.wheel-pointer {
-    position: absolute;
-    top: -10px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 12px solid transparent;
-    border-right: 12px solid transparent;
-    border-top: 20px solid #FFD700;
-    z-index: 2;
-}
-
-.wheel {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    position: relative;
-    transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);
-    border: 4px solid rgba(255, 255, 255, 0.1);
-}
-
-.wheel-label {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform-origin: 0 0;
-    font-size: 0.7rem;
-    font-weight: 700;
-    color: #fff;
-    white-space: nowrap;
-}
-
-.wheel-center-mark {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: #1a1a2e;
-    border: 2px solid #FFD700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 800;
-    font-size: 0.8rem;
-    z-index: 2;
-}
-
-/* Prize */
-.prize-burst {
-    font-size: 2.5rem;
-    margin-bottom: 0.5rem;
-}
-
-.prize-title {
-    font-size: 1.6rem;
-    font-weight: 900;
-    background: linear-gradient(90deg, #FFD700, #43a047, #e53935);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin-bottom: 0.5rem;
-}
-
-.winner-badge {
-    margin-top: 1rem;
-    padding: 10px 16px;
-    border-radius: 8px;
-    background: rgba(255, 215, 0, 0.15);
-    border: 1px solid rgba(255, 215, 0, 0.4);
-    color: #FFD700;
-    font-weight: 700;
-    font-size: 0.85rem;
 }
 
 .card-footer-stripe {
