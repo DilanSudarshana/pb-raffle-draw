@@ -117,7 +117,7 @@
                                     :class="optionClass(letter)" :disabled="answered" @click="selectAnswer(letter)">
                                     <span class="opt-letter">{{ letter }}</span>
                                     <span class="opt-text">{{ currentQuestion?.['option_' + letter.toLowerCase()]
-                                        }}</span>
+                                    }}</span>
                                 </button>
                             </div>
 
@@ -172,26 +172,44 @@ import { supabase } from '@/lib/supabase'
 
 const router = useRouter()
 
-// ---------- screen state ----------
-const screen = ref('language') // language | reference | quiz | result
+// =====================================================
+// SCREEN STATE
+// =====================================================
+
+const screen = ref('language')
+// language | reference | quiz | result
+
 const isLoaded = ref(false)
 const loading = ref(false)
 const alertMsg = ref('')
 
-onMounted(() => {
-    setTimeout(() => { isLoaded.value = true }, 120)
-})
+// =====================================================
+// LANGUAGE SELECTION
+// =====================================================
 
-// ---------- language selection ----------
 const langOptions = [
-    { code: 1, label: 'English' },
-    { code: 2, label: 'සිංහල' },
-    { code: 3, label: 'தமிழ்' },
+    {
+        code: 1,
+        label: 'English',
+    },
+    {
+        code: 2,
+        label: 'සිංහල',
+    },
+    {
+        code: 3,
+        label: 'தமிழ்',
+    },
 ]
+
 const selectedLang = ref(null)
 
 const currentLangLabel = computed(() => {
-    return langOptions.find(l => l.code === selectedLang.value)?.label || ''
+    return (
+        langOptions.find(
+            (language) => language.code === selectedLang.value
+        )?.label || ''
+    )
 })
 
 function chooseLanguage(code) {
@@ -200,230 +218,646 @@ function chooseLanguage(code) {
     screen.value = 'reference'
 }
 
-// ---------- mobile number entry ----------
-const mobile = ref('')
-const participantName = ref('') // pulled from participants.name once looked up
+// =====================================================
+// PARTICIPANT
+// =====================================================
 
-const isValidMobile = computed(() => /^0\d{9}$/.test(mobile.value))
+const mobile = ref('')
+const participantName = ref('')
+
+const isValidMobile = computed(() => {
+    return /^0\d{9}$/.test(mobile.value)
+})
+
+// =====================================================
+// QUIZ QUESTIONS
+// =====================================================
+
+const attemptQuestions = ref([])
+
+const current = ref(0)
+
+const currentQuestion = computed(() => {
+    return attemptQuestions.value[current.value]
+})
+
+const progressPct = computed(() => {
+    if (!attemptQuestions.value.length) {
+        return 0
+    }
+
+    return (
+        ((current.value + 1) /
+            attemptQuestions.value.length) *
+        100
+    )
+})
+
+// =====================================================
+// QUIZ STATE
+// =====================================================
+
+const answered = ref(false)
+
+const feedback = ref('')
+
+const feedbackClass = ref('')
+
+const selectedAnswer = ref(null)
+
+const correctOption = ref(null)
+
+const quizComplete = ref(false)
+
+const score = ref(0)
+
+const passed = ref(false)
+
+const resultTitle = ref('')
+
+const resultDesc = ref('')
+
+// =====================================================
+// TIMER
+// =====================================================
+
+const QUESTION_TIME = 15
+
+const seconds = ref(QUESTION_TIME)
+
+let timerId = null
+
+const ringStyle = computed(() => {
+    const circumference = 2 * Math.PI * 19
+
+    const pct = seconds.value / QUESTION_TIME
+
+    return {
+        strokeDasharray: `${circumference}`,
+        strokeDashoffset:
+            `${circumference * (1 - pct)}`,
+    }
+})
+
+// =====================================================
+// PAGE LOAD
+// =====================================================
+
+onMounted(() => {
+    setTimeout(() => {
+        isLoaded.value = true
+    }, 120)
+})
+
+// =====================================================
+// ARRAY SHUFFLE
+// =====================================================
 
 function shuffle(arr) {
     const a = [...arr]
+
     for (let i = a.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1))
+
             ;[a[i], a[j]] = [a[j], a[i]]
     }
+
     return a
 }
 
+// =====================================================
+// SUBMIT MOBILE NUMBER
+// =====================================================
+
 const submitMobile = async () => {
+    // ---------------------------------------------
+    // Validate mobile
+    // ---------------------------------------------
+
     if (!isValidMobile.value) {
-        alertMsg.value = 'Please enter a valid 10-digit mobile number.'
+        alertMsg.value =
+            'Please enter a valid 10-digit mobile number.'
         return
     }
+
+    // ---------------------------------------------
+    // Validate language
+    // ---------------------------------------------
+
     if (!selectedLang.value) {
-        alertMsg.value = 'Please select a language first.'
+        alertMsg.value =
+            'Please select a language first.'
+
         screen.value = 'language'
+
         return
     }
 
     loading.value = true
     alertMsg.value = ''
+
     try {
-        // 1. Participant must already be registered
-        const { data: participant, error: pErr } = await supabase
+        // =================================================
+        // 1. FIND PARTICIPANT
+        // =================================================
+
+        const {
+            data: participant,
+            error: pErr,
+        } = await supabase
             .from('participants')
-            .select('mobile, name, id_number, quiz_attempted, qualified')
+            .select(
+                'mobile, name, id_number, quiz_attempted, qualified'
+            )
             .eq('mobile', mobile.value)
             .maybeSingle()
 
         if (pErr) {
-            alertMsg.value = `Participant lookup failed: ${pErr.message}`
+            alertMsg.value =
+                `Participant lookup failed: ${pErr.message}`
+
             return
         }
+
+        // ---------------------------------------------
+        // Participant does not exist
+        // ---------------------------------------------
 
         if (!participant) {
-            alertMsg.value = 'This mobile number is not registered. Please register first.'
+            alertMsg.value =
+                'This mobile number is not registered. Please register first.'
+
             return
         }
 
-        // quiz_attempted is an integer counter (0 = not attempted yet)
-        if (participant.quiz_attempted && participant.quiz_attempted > 0) {
-            alertMsg.value = 'You have already participated in this quiz.'
+        // =================================================
+        // 2. CHECK WHETHER QUIZ WAS ALREADY ATTEMPTED
+        // =================================================
+
+        if (
+            participant.quiz_attempted &&
+            participant.quiz_attempted > 0
+        ) {
+            alertMsg.value =
+                'You have already participated in this quiz.'
+
             return
         }
 
+        // Store participant name
         participantName.value = participant.name
 
-        // 2. Pull active questions, pick 3 at random
-        const { data: questions, error: qErr } = await supabase
+        // =================================================
+        // 3. GET QUESTIONS FOR SELECTED LANGUAGE ONLY
+        // =================================================
+
+        /*
+         * Language mapping:
+         *
+         * 1 = English
+         * 2 = Sinhala
+         * 3 = Tamil
+         */
+
+        const {
+            data: questions,
+            error: qErr,
+        } = await supabase
             .from('questions')
-            .select('id, question_text, option_a, option_b, option_c, option_d, correct_option, active, lang')
+            .select(`
+                id,
+                question_text,
+                option_a,
+                option_b,
+                option_c,
+                option_d,
+                correct_option,
+                active,
+                lang
+            `)
             .eq('active', true)
+            .eq('lang', selectedLang.value)
+
+        // =================================================
+        // QUESTION FETCH ERROR
+        // =================================================
 
         if (qErr) {
-            alertMsg.value = `Question fetch failed: ${qErr.message}`
+            alertMsg.value =
+                `Question fetch failed: ${qErr.message}`
+
             return
         }
+
+        // =================================================
+        // CHECK QUESTION COUNT
+        // =================================================
 
         if (!questions || questions.length < 3) {
-            alertMsg.value = `Not enough active questions available right now. (rows returned: ${questions?.length ?? 0})`
+            alertMsg.value =
+                `Not enough active questions available in ${currentLangLabel.value}. ` +
+                `Required: 3, Available: ${questions?.length ?? 0}.`
+
             return
         }
 
-        attemptQuestions.value = shuffle(questions).slice(0, 3)
+        // =================================================
+        // 4. RANDOMLY SELECT EXACTLY 3 QUESTIONS
+        // =================================================
+
+        attemptQuestions.value =
+            shuffle(questions).slice(0, 3)
+
+        // =================================================
+        // 5. RESET QUIZ
+        // =================================================
+
         score.value = 0
+
         current.value = 0
+
+        quizComplete.value = false
+
+        passed.value = false
+
+        selectedAnswer.value = null
+
+        correctOption.value = null
+
+        answered.value = false
+
+        feedback.value = ''
+
+        feedbackClass.value = ''
+
+        // =================================================
+        // 6. OPEN QUIZ
+        // =================================================
+
         screen.value = 'quiz'
+
         startQuestion()
+
     } catch (e) {
-        alertMsg.value = e.message || 'Something went wrong. Please try again.'
+        console.error(
+            'submitMobile error:',
+            e
+        )
+
+        alertMsg.value =
+            e?.message ||
+            'Something went wrong. Please try again.'
+
     } finally {
         loading.value = false
     }
 }
 
-// ---------- quiz ----------
-const attemptQuestions = ref([])
-const current = ref(0)
-const answered = ref(false)
-const feedback = ref('')
-const feedbackClass = ref('')
-const selectedAnswer = ref(null)
-const correctOption = ref(null)
-const quizComplete = ref(false)
-const score = ref(0)
-
-const currentQuestion = computed(() => attemptQuestions.value[current.value])
-const progressPct = computed(() => ((current.value + 1) / attemptQuestions.value.length) * 100)
-
-const seconds = ref(15)
-let timerId = null
-
-const ringStyle = computed(() => {
-    const circumference = 2 * Math.PI * 19
-    const pct = seconds.value / 15
-    return {
-        strokeDasharray: `${circumference}`,
-        strokeDashoffset: `${circumference * (1 - pct)}`,
-    }
-})
+// =====================================================
+// START QUESTION
+// =====================================================
 
 function startQuestion() {
     answered.value = false
+
     feedback.value = ''
+
+    feedbackClass.value = ''
+
     selectedAnswer.value = null
+
     correctOption.value = null
+
     startTimer()
 }
 
+// =====================================================
+// START TIMER
+// =====================================================
+
 function startTimer() {
     clearInterval(timerId)
-    seconds.value = 15
+
+    seconds.value = QUESTION_TIME
+
     timerId = setInterval(() => {
         seconds.value--
+
         if (seconds.value <= 0) {
             clearInterval(timerId)
-            if (!answered.value) selectAnswer('X', true)
+
+            if (!answered.value) {
+                selectAnswer('X', true)
+            }
         }
     }, 1000)
 }
 
+// =====================================================
+// OPTION STYLE
+// =====================================================
+
 function optionClass(letter) {
-    if (!answered.value) return ''
-    if (letter === correctOption.value) return 'opt-correct'
-    if (letter === selectedAnswer.value && letter !== correctOption.value) return 'opt-wrong'
+    if (!answered.value) {
+        return ''
+    }
+
+    // Correct option
+    if (letter === correctOption.value) {
+        return 'opt-correct'
+    }
+
+    // Wrong selected option
+    if (
+        letter === selectedAnswer.value &&
+        letter !== correctOption.value
+    ) {
+        return 'opt-wrong'
+    }
+
     return ''
 }
 
-async function selectAnswer(letter, timeout = false) {
-    if (answered.value) return
+// =====================================================
+// SELECT ANSWER
+// =====================================================
+
+async function selectAnswer(
+    letter,
+    timeout = false
+) {
+    // Prevent multiple clicks
+    if (answered.value) {
+        return
+    }
+
     answered.value = true
+
     clearInterval(timerId)
+
     selectedAnswer.value = letter
 
     const q = currentQuestion.value
-    const isCorrect = letter === q.correct_option
-    correctOption.value = q.correct_option
-    if (isCorrect) score.value++
 
-    feedbackClass.value = isCorrect ? 'fb-correct' : 'fb-wrong'
-    feedback.value = isCorrect
-        ? '✓ Correct! Your answer is correct.'
-        : `✕ Incorrect. ${timeout ? 'Time expired. ' : ''}Correct answer: <strong>Option ${q.correct_option}</strong>.`
+    if (!q) {
+        console.error(
+            'Current question is undefined.'
+        )
 
-    const isLastQuestion = current.value === attemptQuestions.value.length - 1
-    if (isLastQuestion) {
-        quizComplete.value = true
-        const didPass = score.value === attemptQuestions.value.length
-        passed.value = didPass
+        return
+    }
 
-        try {
-            // quiz_attempts columns: participant_mobile, question_ids (uuid[]),
-            // score, passed, completed_at — there is NO "mobile" or "lang" column
-            const { error: attemptErr } = await supabase.from('quiz_attempts').insert({
-                participant_mobile: mobile.value,
-                question_ids: attemptQuestions.value.map(q => q.id),
-                score: score.value,
+    // =================================================
+    // CHECK ANSWER
+    // =================================================
+
+    const isCorrect =
+        letter === q.correct_option
+
+    correctOption.value =
+        q.correct_option
+
+    // =================================================
+    // CALCULATE NEW SCORE
+    // =================================================
+
+    const newScore =
+        score.value +
+        (isCorrect ? 1 : 0)
+
+    score.value = newScore
+
+    // =================================================
+    // FEEDBACK
+    // =================================================
+
+    feedbackClass.value =
+        isCorrect
+            ? 'fb-correct'
+            : 'fb-wrong'
+
+    if (isCorrect) {
+        feedback.value =
+            '✓ Correct! Your answer is correct.'
+    } else {
+        feedback.value =
+            `✕ Incorrect. ${timeout
+                ? 'Time expired. '
+                : ''
+            }Correct answer: <strong>Option ${q.correct_option}</strong>.`
+    }
+
+    // =================================================
+    // CHECK LAST QUESTION
+    // =================================================
+
+    const isLastQuestion =
+        current.value ===
+        attemptQuestions.value.length - 1
+
+    if (!isLastQuestion) {
+        return
+    }
+
+    // =================================================
+    // QUIZ COMPLETE
+    // =================================================
+
+    quizComplete.value = true
+
+    // IMPORTANT:
+    // Use newScore because this answer has just been added.
+    const finalScore = newScore
+
+    const totalQuestions =
+        attemptQuestions.value.length
+
+    const didPass =
+        finalScore === totalQuestions
+
+    passed.value = didPass
+
+    // =================================================
+    // SAVE QUIZ ATTEMPT
+    // =================================================
+
+    try {
+        const {
+            error: attemptErr,
+        } = await supabase
+            .from('quiz_attempts')
+            .insert({
+                participant_mobile:
+                    mobile.value,
+
+                question_ids:
+                    attemptQuestions.value.map(
+                        (q) => q.id
+                    ),
+
+                score: finalScore,
+
                 passed: didPass,
-                completed_at: new Date().toISOString(),
+
+                completed_at:
+                    new Date().toISOString(),
             })
-            if (attemptErr) {
-                console.error('quiz_attempts insert failed:', attemptErr.message, attemptErr.details, attemptErr.hint)
-            }
 
-            // quiz_attempted is an INTEGER column, not boolean — send 1, not true
-            const { error: updateErr } = await supabase
-                .from('participants')
-                .update({ quiz_attempted: 1, qualified: didPass, quiz_completed_at: new Date().toISOString() })
-                .eq('mobile', mobile.value)
-            if (updateErr) {
-                console.error('participants update failed:', updateErr.message, updateErr.details, updateErr.hint)
-            }
-        } catch (e) {
-            console.error('Failed to save quiz attempt:', e)
+        if (attemptErr) {
+            console.error(
+                'quiz_attempts insert failed:',
+                attemptErr.message,
+                attemptErr.details,
+                attemptErr.hint
+            )
         }
 
-        if (didPass) {
-            resultTitle.value = 'Excellent! You Qualified!'
-            resultDesc.value = 'All 3 answers are correct. Get ready for the raffle draw...'
-            screen.value = 'result'
-            // hand off to the raffle draw page, carrying the participant along
-            setTimeout(() => {
-                router.push({
-                    name: 'raffle_draw',
-                    query: { mobile: mobile.value, name: participantName.value },
-                })
-            }, 1200)
-        } else {
-            resultTitle.value = 'Challenge Complete'
-            resultDesc.value = 'You need all 3 correct answers to unlock the raffle draw.'
-            screen.value = 'result'
+        // =================================================
+        // UPDATE PARTICIPANT
+        // =================================================
+
+        const {
+            error: updateErr,
+        } = await supabase
+            .from('participants')
+            .update({
+                quiz_attempted: 1,
+
+                qualified: didPass,
+
+                quiz_completed_at:
+                    new Date().toISOString(),
+            })
+            .eq(
+                'mobile',
+                mobile.value
+            )
+
+        if (updateErr) {
+            console.error(
+                'participants update failed:',
+                updateErr.message,
+                updateErr.details,
+                updateErr.hint
+            )
         }
+
+    } catch (e) {
+        console.error(
+            'Failed to save quiz attempt:',
+            e
+        )
+    }
+
+    // =================================================
+    // RESULT
+    // =================================================
+
+    if (didPass) {
+
+        resultTitle.value =
+            'Excellent! You Qualified!'
+
+        resultDesc.value =
+            'All 3 answers are correct. Get ready for the raffle draw...'
+
+        screen.value = 'result'
+
+        // =================================================
+        // GO TO RAFFLE DRAW
+        // =================================================
+
+        setTimeout(() => {
+            router.push({
+                name: 'raffle_draw',
+
+                query: {
+                    mobile:
+                        mobile.value,
+
+                    name:
+                        participantName.value,
+                },
+            })
+        }, 1200)
+
+    } else {
+
+        resultTitle.value =
+            'Challenge Complete'
+
+        resultDesc.value =
+            `You scored ${finalScore}/${totalQuestions}. ` +
+            'You need all 3 correct answers to unlock the raffle draw.'
+
+        screen.value = 'result'
     }
 }
 
+// =====================================================
+// NEXT QUESTION
+// =====================================================
+
 function nextQuestion() {
+    if (
+        current.value >=
+        attemptQuestions.value.length - 1
+    ) {
+        return
+    }
+
     current.value++
+
     startQuestion()
 }
 
+// =====================================================
+// RESTART QUIZ
+// =====================================================
+
 function restart() {
     clearInterval(timerId)
+
     mobile.value = ''
+
     participantName.value = ''
+
     alertMsg.value = ''
+
     attemptQuestions.value = []
+
     current.value = 0
+
     score.value = 0
+
     quizComplete.value = false
+
+    passed.value = false
+
+    selectedAnswer.value = null
+
+    correctOption.value = null
+
+    answered.value = false
+
+    feedback.value = ''
+
+    feedbackClass.value = ''
+
+    seconds.value = QUESTION_TIME
+
     selectedLang.value = null
+
+    resultTitle.value = ''
+
+    resultDesc.value = ''
+
     screen.value = 'language'
 }
 
-// ---------- result ----------
-const resultTitle = ref('')
-const resultDesc = ref('')
-const passed = ref(false)
+// =====================================================
+// CLEANUP TIMER
+// =====================================================
 
 onBeforeUnmount(() => {
     clearInterval(timerId)
